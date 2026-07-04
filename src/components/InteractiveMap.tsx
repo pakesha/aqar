@@ -331,6 +331,11 @@ export default function InteractiveMap({
 
     mapRef.current = map;
 
+    // Force invalidating layout size after a tiny tick to make sure Leaflet measures the container correctly
+    setTimeout(() => {
+      if (map) map.invalidateSize();
+    }, 200);
+
     // Create markers layer group
     const markersLayer = L.layerGroup().addTo(map);
     markersLayerRef.current = markersLayer;
@@ -514,7 +519,7 @@ export default function InteractiveMap({
   }, [clusteredMarkers, selectedProperty]);
 
   return (
-    <div id="interactive-map-screen" className="relative h-screen w-screen overflow-hidden bg-slate-950">
+    <div id="interactive-map-screen" className="flex flex-col h-full w-full bg-slate-950 text-white" dir="rtl">
       
       {/* Self-contained CSS Styles for Custom Dark Popup */}
       <style>{`
@@ -537,66 +542,37 @@ export default function InteractiveMap({
         .leaflet-grabbing {
           cursor: grabbing !important;
         }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
       `}</style>
 
-      {/* Floating Header Navigation Overlay (Minimal & Translucent Glass) */}
-      <div className="absolute top-4 left-4 right-4 z-20 flex flex-wrap gap-3 md:flex-nowrap items-center justify-between bg-slate-900/85 backdrop-blur-lg p-3 rounded-2xl border border-slate-800/80 shadow-2xl" dir="rtl">
-        
-        {/* City Filter Toggles */}
-        <div className="flex gap-1 overflow-x-auto p-0.5 bg-slate-950/60 rounded-xl max-w-full no-scrollbar border border-slate-800/60">
-          {Object.keys(CITY_COORDINATES).map(city => (
-            <button
-              key={city}
-              id={`city-btn-${city}`}
-              onClick={() => handleCityChange(city)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 whitespace-nowrap flex items-center gap-1 ${
-                activeCity === city
-                  ? 'bg-amber-500 text-slate-950 shadow-lg font-black scale-105'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-850'
-              }`}
-            >
-              <Compass className="w-3.5 h-3.5 animate-pulse" />
-              {city}
-            </button>
-          ))}
-        </div>
+      {/* TOP PANEL: THE MAP (Nisf Al-Shashah) */}
+      <div className="relative h-[40vh] md:h-[45vh] w-full border-b border-slate-800 bg-slate-900 overflow-hidden shrink-0">
+        {/* Actual OpenStreetMap Leaflet Container */}
+        <div 
+          ref={containerRef}
+          id="leaflet-live-map"
+          className="w-full h-full z-0 relative"
+        />
 
-        {/* Search HUD & Filters */}
-        <div className="flex items-center gap-2">
-          {aiSuggestedFilters && (
-            <span className="flex items-center gap-1 bg-purple-500/15 text-purple-300 text-[10px] px-2.5 py-1 rounded-full border border-purple-500/25">
-              <Sparkles className="w-3 h-3 text-purple-400" />
-              تصفية الذكاء الاصطناعي نشطة
-            </span>
-          )}
-
-          {/* Collapsible Advanced Filters Panel Toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition-all ${
-              showFilters
-                ? 'bg-amber-500 border-amber-500 text-slate-950 font-black'
-                : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-850'
-            }`}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 animate-pulse" />
-            <span>تصفية متقدمة</span>
-          </button>
-        </div>
-
-        {/* Map Theme Toggle */}
-        <div className="flex gap-1 p-0.5 bg-slate-950/60 rounded-xl border border-slate-800/60">
+        {/* Floating Theme Selector on top-left of the map */}
+        <div className="absolute top-3 left-3 z-20 flex gap-1 p-0.5 bg-slate-900/85 backdrop-blur-md rounded-xl border border-slate-800/80 shadow-lg">
           {([
             { id: 'satellite', label: '🛰️ قمر صناعي' },
-            { id: 'snap', label: '🗺️ خريطة شوارع' },
+            { id: 'snap', label: '🗺️ خريطة' },
             { id: 'classic', label: 'كلاسيكي' }
           ] as const).map(style => (
             <button
               key={style.id}
               onClick={() => setMapTheme(style.id)}
-              className={`px-2.5 py-1.5 text-[10px] font-black rounded-lg transition-all whitespace-nowrap ${
+              className={`px-2 py-1 text-[9px] font-bold rounded-lg transition-all whitespace-nowrap ${
                 mapTheme === style.id
-                  ? 'bg-amber-500 text-slate-950 font-black shadow-lg'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
                   : 'text-slate-400 hover:text-white hover:bg-slate-850'
               }`}
             >
@@ -604,318 +580,413 @@ export default function InteractiveMap({
             </button>
           ))}
         </div>
-      </div>
 
-      {/* Actual OpenStreetMap Leaflet Container */}
-      <div 
-        ref={containerRef}
-        id="leaflet-live-map"
-        className="w-full h-full z-0 relative"
-      />
-
-      {/* Floating Zoom / Geolocation Coordinates Controls on Right Side */}
-      <div className="absolute bottom-24 right-6 z-20 flex flex-col gap-2">
-        <button
-          onClick={() => mapRef.current?.zoomIn()}
-          className="w-11 h-11 bg-slate-900/85 backdrop-blur border border-slate-800 rounded-xl flex items-center justify-center text-white hover:bg-slate-800 shadow-xl active:scale-95 transition-all"
-          title="تكبير"
-        >
-          <ZoomIn className="w-5 h-5 text-amber-400" />
-        </button>
-        <button
-          onClick={() => mapRef.current?.zoomOut()}
-          className="w-11 h-11 bg-slate-900/85 backdrop-blur border border-slate-800 rounded-xl flex items-center justify-center text-white hover:bg-slate-800 shadow-xl active:scale-95 transition-all"
-          title="تصغير"
-        >
-          <ZoomOut className="w-5 h-5 text-amber-400" />
-        </button>
-        <button
-          onClick={handleLocateUser}
-          className="w-11 h-11 bg-slate-900/85 backdrop-blur border border-slate-800 rounded-xl flex items-center justify-center text-white hover:bg-slate-800 shadow-xl active:scale-95 transition-all"
-          title="تحديد موقعي الحالي GPS"
-        >
-          <Navigation className="w-5 h-5 text-amber-400 animate-pulse" />
-        </button>
-        <button
-          onClick={() => handleCityChange(activeCity)}
-          className="w-11 h-11 bg-slate-900/85 backdrop-blur border border-slate-800 rounded-xl flex items-center justify-center text-white hover:bg-slate-800 shadow-xl active:scale-95 transition-all"
-          title="إعادة تركيز"
-        >
-          <RefreshCw className="w-5 h-5 text-amber-400" />
-        </button>
-      </div>
-
-      {/* HUD Analytics Glass widget (Bottom Left) */}
-      <div className="absolute bottom-24 left-6 z-20 bg-slate-900/80 backdrop-blur-md p-4 rounded-2xl border border-slate-800/80 max-w-[280px] sm:max-w-xs shadow-2xl text-right hidden sm:block" dir="rtl">
-        <div className="flex items-center gap-2 mb-1.5 justify-end">
-          <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">الربط والتحليل العقاري الموحد</span>
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-        </div>
-        <h4 className="text-xs font-black text-white mb-2">عقارات نشطة في {activeCity}</h4>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="bg-slate-950/50 p-2 rounded-xl border border-slate-800/50">
-            <span className="text-slate-500 block text-[9px] mb-0.5 font-bold">معروض المدينة</span>
-            <span className="text-sm font-extrabold text-amber-400">
-              {properties.filter(p => p.city === activeCity).length} عقار
-            </span>
-          </div>
-          <div className="bg-slate-950/50 p-2 rounded-xl border border-slate-800/50">
-            <span className="text-slate-500 block text-[9px] mb-0.5 font-bold">بمحيط الرؤية</span>
-            <span className="text-sm font-extrabold text-white">
-              {baseFilteredProperties.length} عقار
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Floating Advanced Filter Sidebar Panel */}
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            className="absolute top-24 left-4 z-40 w-80 max-h-[calc(100vh-250px)] overflow-y-auto bg-slate-950/95 backdrop-blur-md p-5 rounded-3xl border border-slate-800 shadow-2xl space-y-4 text-right no-scrollbar"
-            dir="rtl"
+        {/* Floating Zoom / Geolocation Coordinates Controls on Right Side */}
+        <div className="absolute bottom-4 right-3 z-20 flex flex-col gap-1.5">
+          <button
+            onClick={() => mapRef.current?.zoomIn()}
+            className="w-8 h-8 bg-slate-900/85 backdrop-blur border border-slate-800 rounded-lg flex items-center justify-center text-white hover:bg-slate-800 shadow-xl active:scale-95 transition-all"
+            title="تكبير"
           >
-            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-              <h3 className="text-xs font-black text-white flex items-center gap-1.5">
-                <SlidersHorizontal className="w-4 h-4 text-amber-400" />
-                تصفية متقدمة للنتائج
-              </h3>
+            <ZoomIn className="w-4 h-4 text-amber-400" />
+          </button>
+          <button
+            onClick={() => mapRef.current?.zoomOut()}
+            className="w-8 h-8 bg-slate-900/85 backdrop-blur border border-slate-800 rounded-lg flex items-center justify-center text-white hover:bg-slate-800 shadow-xl active:scale-95 transition-all"
+            title="تصغير"
+          >
+            <ZoomOut className="w-4 h-4 text-amber-400" />
+          </button>
+          <button
+            onClick={handleLocateUser}
+            className="w-8 h-8 bg-slate-900/85 backdrop-blur border border-slate-800 rounded-lg flex items-center justify-center text-white hover:bg-slate-800 shadow-xl active:scale-95 transition-all"
+            title="تحديد موقعي الحالي GPS"
+          >
+            <Navigation className="w-4 h-4 text-amber-400" />
+          </button>
+          <button
+            onClick={() => handleCityChange(activeCity)}
+            className="w-8 h-8 bg-slate-900/85 backdrop-blur border border-slate-800 rounded-lg flex items-center justify-center text-white hover:bg-slate-800 shadow-xl active:scale-95 transition-all"
+            title="إعادة تركيز"
+          >
+            <RefreshCw className="w-4 h-4 text-amber-400" />
+          </button>
+        </div>
+
+        {/* Floating HUD Analytics (Bottom Left) */}
+        <div className="absolute bottom-4 left-3 z-20 bg-slate-900/85 backdrop-blur-md px-2.5 py-1.5 rounded-xl border border-slate-800/80 shadow-lg text-right hidden sm:block">
+          <div className="flex items-center gap-1.5 justify-end mb-0.5">
+            <span className="text-[8px] font-bold text-slate-400">عقارات نشطة في {activeCity}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+          </div>
+          <div className="text-[10px] font-extrabold text-amber-400">
+            {properties.filter(p => p.city === activeCity).length} عقار بالمدينة
+          </div>
+        </div>
+      </div>
+
+      {/* BOTTOM PANEL: THE CONTROL CENTER AND NAVIGATION BUTTONS */}
+      <div className="flex-1 flex flex-col min-h-0 bg-slate-950 overflow-hidden relative">
+        
+        {/* SECTION 1: THE CORE TAB BAR (PROUDLY PLACED & CANNOT BE COVERED BY THE MAP) */}
+        <div className="bg-slate-900/95 border-b border-slate-800/80 px-4 py-2 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar shadow-md shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('map')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                activeTab === 'map'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>الخريطة</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                activeTab === 'dashboard'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>لوحة التحكم</span>
+            </button>
+
+            {(currentUser.activeRole === 'admin' || currentUser.id === 'user_admin') && (
               <button
-                onClick={() => setShowFilters(false)}
-                className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                onClick={() => setActiveTab('admin')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                  activeTab === 'admin'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                }`}
               >
-                <X className="w-4 h-4" />
+                <Shield className="w-3.5 h-3.5" />
+                <span>الأدمن</span>
               </button>
+            )}
+
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                activeTab === 'ai'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>المساعد الذكي</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Quick Role switcher */}
+            <div className="relative">
+              <button
+                onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+                className="px-2 py-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-[10px] font-bold text-amber-400 flex items-center gap-1 transition-all"
+              >
+                <span>
+                  {currentUser.activeRole === 'buyer' ? 'مشتري' : currentUser.activeRole === 'seller' ? 'بائع' : currentUser.activeRole === 'landlord' ? 'مؤجر' : 'مستأجر'}
+                </span>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
+              </button>
+
+              <AnimatePresence>
+                {showRoleSwitcher && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute bottom-10 left-0 w-36 bg-slate-900 border border-slate-800 rounded-xl p-1.5 shadow-2xl space-y-1 text-right z-50"
+                  >
+                    {currentUser.roles.map((role: any) => (
+                      <button
+                        key={role}
+                        onClick={() => {
+                          onUpdateUser({ activeRole: role });
+                          setShowRoleSwitcher(false);
+                        }}
+                        className={`w-full px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-right flex items-center justify-between transition-all ${
+                          currentUser.activeRole === role
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <span>{role === 'buyer' ? 'مشتري' : role === 'seller' ? 'بائع' : role === 'landlord' ? 'مؤجر' : 'مستأجر'}</span>
+                        {currentUser.activeRole === role && <CheckCircle2 className="w-3 h-3 text-slate-950" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            {/* Keyword Search Input */}
-            <form onSubmit={handleLocationSearch} className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400">البحث عن مدينة أو حي أو شارع بالخريطة</label>
+            {/* "أعلن" Add Button */}
+            {(currentUser.roles.includes('seller') || currentUser.roles.includes('landlord')) && (
+              <button
+                onClick={() => setActiveTab('add')}
+                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1 transition-all hover:scale-105 shadow-md shadow-amber-500/10"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                <span>أعلن</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* SECTION 2: SCROLLABLE ACTIVE CONTROL PANEL & PROPERTY RESULT GRID */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar bg-slate-950/40">
+          
+          {/* A. City Quick Slider */}
+          <div className="space-y-1.5">
+            <h3 className="text-[11px] font-black text-slate-400 flex items-center gap-1.5 justify-start">
+              <Compass className="w-3.5 h-3.5 text-amber-500" />
+              اختر المدينة للتركيز الفوري:
+            </h3>
+            <div className="flex gap-1.5 overflow-x-auto pb-1.5 no-scrollbar">
+              {Object.keys(CITY_COORDINATES).map(city => (
+                <button
+                  key={city}
+                  onClick={() => handleCityChange(city)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition-all duration-200 whitespace-nowrap ${
+                    activeCity === city
+                      ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/10 scale-[1.02]'
+                      : 'bg-slate-900 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-750'
+                  }`}
+                >
+                  {city}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* B. Two Column Filter & Search Panel */}
+          <div className="bg-slate-900/60 border border-slate-800/80 p-3.5 rounded-2xl grid grid-cols-1 md:grid-cols-4 gap-3 text-right">
+            
+            {/* Search inputs */}
+            <div className="md:col-span-2 space-y-1">
+              <span className="block text-[10px] font-bold text-slate-400">البحث بالاسم أو المنطقة:</span>
               <div className="relative">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="مثال: الزمالك، الإسكندرية، الدقي..."
-                  className="w-full pl-8 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 text-right"
+                  placeholder="مثال: التجمع الخامس، الرياض، الدقي..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-500"
                 />
-                <button type="submit" className="absolute left-2.5 top-2.5 text-slate-400 hover:text-white">
+                <button onClick={handleLocationSearch} className="absolute left-2.5 top-2.5 text-slate-400 hover:text-white">
                   <Search className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </form>
-
-            {/* Operation Type selection */}
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400">نوع العملية</label>
-              <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-900 rounded-xl border border-slate-800">
-                {(['all', 'sale', 'rent'] as const).map(op => (
-                  <button
-                    key={op}
-                    onClick={() => setFilterType(op)}
-                    className={`py-1 rounded-lg text-[10px] font-black transition-all ${
-                      filterType === op
-                        ? 'bg-amber-500 text-slate-950 shadow-md font-black'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {op === 'all' ? 'الكل' : op === 'sale' ? 'للبيع' : 'للإيجار'}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            {/* Property Type selection */}
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400">تصنيف العقار</label>
-              <div className="grid grid-cols-2 gap-1 p-0.5 bg-slate-900 rounded-xl border border-slate-800">
-                {(['all', 'apartment', 'villa', 'land'] as const).map(pType => (
-                  <button
-                    key={pType}
-                    onClick={() => setFilterPropertyType(pType)}
-                    className={`py-1 rounded-lg text-[9px] font-black transition-all ${
-                      filterPropertyType === pType
-                        ? 'bg-amber-500 text-slate-950 font-black'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {pType === 'all' ? 'الكل' : pType === 'apartment' ? 'شقة' : pType === 'villa' ? 'فيلا' : 'أرض'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Price Range */}
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400">نطاق السعر</label>
-              <div className="flex gap-2">
+            {/* Price Filter inputs */}
+            <div className="space-y-1">
+              <span className="block text-[10px] font-bold text-slate-400">نطاق السعر (ج.م):</span>
+              <div className="flex gap-1.5">
                 <input
                   type="number"
                   value={minPrice}
                   onChange={(e) => setMinPrice(e.target.value)}
                   placeholder="من"
-                  className="w-1/2 py-1.5 px-2 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 text-left font-mono"
+                  className="w-1/2 py-1 px-2 bg-slate-950 border border-slate-800 rounded-lg text-[10px] text-slate-200 focus:outline-none focus:border-amber-500 text-center"
                 />
                 <input
                   type="number"
                   value={maxPrice}
                   onChange={(e) => setMaxPrice(e.target.value)}
                   placeholder="إلى"
-                  className="w-1/2 py-1.5 px-2 bg-slate-900 border border-slate-800 rounded-lg text-[10px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-amber-500 text-left font-mono"
+                  className="w-1/2 py-1 px-2 bg-slate-950 border border-slate-800 rounded-lg text-[10px] text-slate-200 focus:outline-none focus:border-amber-500 text-center"
                 />
               </div>
             </div>
 
-            {/* Rooms Selector */}
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400">عدد الغرف الأدنى</label>
-              <div className="grid grid-cols-5 gap-1 p-0.5 bg-slate-900 rounded-xl border border-slate-800">
-                {(['all', '1', '2', '3', '4'] as const).map(r => (
-                  <button
-                    key={r}
-                    onClick={() => setRoomsCount(r)}
-                    className={`py-1 rounded-lg text-[9px] font-black transition-all ${
-                      roomsCount === r
-                        ? 'bg-amber-500 text-slate-950 font-black'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {r === 'all' ? 'الكل' : `+${r}`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Reset Filters button */}
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                setFilterType('all');
-                setFilterPropertyType('all');
-                setMinPrice('');
-                setMaxPrice('');
-                setRoomsCount('all');
-              }}
-              className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-[10px] font-black border border-slate-800 rounded-xl transition-all"
-            >
-              إعادة تعيين كافة الفلاتر
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Snapchat-style Floating Glass Navigation tab bar at the bottom */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-35 bg-slate-900/80 backdrop-blur-xl border border-slate-800/80 px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 select-none" dir="rtl">
-        <button
-          onClick={() => setActiveTab('map')}
-          className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-            activeTab === 'map'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
-              : 'text-slate-300 hover:text-white hover:bg-slate-850'
-          }`}
-        >
-          <Compass className="w-4 h-4" />
-          <span>الخريطة</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('dashboard')}
-          className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-            activeTab === 'dashboard'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-300 hover:text-white hover:bg-slate-850'
-          }`}
-        >
-          <LayoutDashboard className="w-4 h-4" />
-          <span>لوحة التحكم</span>
-        </button>
-
-        {(currentUser.activeRole === 'admin' || currentUser.id === 'user_admin') && (
-          <button
-            onClick={() => setActiveTab('admin')}
-            className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-              activeTab === 'admin'
-                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                : 'text-slate-300 hover:text-white hover:bg-slate-850'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            <span>الأدمن</span>
-          </button>
-        )}
-
-        <button
-          onClick={() => setActiveTab('ai')}
-          className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
-            activeTab === 'ai'
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'text-slate-300 hover:text-white hover:bg-slate-850'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-purple-400" />
-          <span>المساعد الذكي</span>
-        </button>
-
-        <div className="w-[1px] h-6 bg-slate-800" />
-
-        {/* User Role Quick Switcher Display inside bottom menu */}
-        <div className="relative">
-          <button
-            onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
-            className="px-2.5 py-1.5 bg-slate-950 hover:bg-slate-850 border border-slate-800 rounded-xl text-[10px] font-black text-amber-400 flex items-center gap-1 transition-all"
-          >
-            <span>
-              {currentUser.activeRole === 'buyer' ? 'مشتري' : currentUser.activeRole === 'seller' ? 'بائع' : currentUser.activeRole === 'landlord' ? 'مؤجر' : 'مستأجر'}
-            </span>
-            <ChevronDown className="w-3 h-3 text-slate-400" />
-          </button>
-
-          {/* Collapsible switch panel list */}
-          <AnimatePresence>
-            {showRoleSwitcher && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="absolute bottom-12 left-0 w-36 bg-slate-900 border border-slate-800 rounded-xl p-2 shadow-2xl space-y-1 text-right"
+            {/* Quick action buttons */}
+            <div className="flex items-end gap-1.5">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 transition-all ${
+                  showFilters
+                    ? 'bg-amber-500 border-amber-500 text-slate-950 font-black'
+                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-850'
+                }`}
               >
-                {currentUser.roles.map((role: any) => (
-                  <button
-                    key={role}
-                    onClick={() => {
-                      onUpdateUser({ activeRole: role });
-                      setShowRoleSwitcher(false);
-                    }}
-                    className={`w-full px-2 py-1.5 rounded-lg text-[10px] font-bold text-right flex items-center justify-between transition-all ${
-                      currentUser.activeRole === role
-                        ? 'bg-amber-500 text-slate-950 font-black'
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <span>{role === 'buyer' ? 'مشتري' : role === 'seller' ? 'بائع' : role === 'landlord' ? 'مؤجر' : 'مستأجر'}</span>
-                    {currentUser.activeRole === role && <CheckCircle2 className="w-3 h-3 text-slate-950" />}
-                  </button>
-                ))}
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>خيارات أكثر</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setFilterType('all');
+                  setFilterPropertyType('all');
+                  setMinPrice('');
+                  setMaxPrice('');
+                  setRoomsCount('all');
+                }}
+                className="px-2.5 py-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white text-[10px] font-bold rounded-xl transition-all"
+                title="إعادة تعيين الفلاتر"
+              >
+                إعادة ضبط
+              </button>
+            </div>
+          </div>
+
+          {/* C. Interactive Filter Expansion Panel */}
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-slate-900/40 border border-slate-800 p-3.5 rounded-2xl grid grid-cols-1 md:grid-cols-3 gap-3 overflow-hidden text-right"
+              >
+                {/* Operation type selector */}
+                <div className="space-y-1">
+                  <span className="block text-[10px] font-bold text-slate-400">نوع العملية:</span>
+                  <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-950 rounded-xl border border-slate-800">
+                    {(['all', 'sale', 'rent'] as const).map(op => (
+                      <button
+                        key={op}
+                        onClick={() => setFilterType(op)}
+                        className={`py-1 rounded-lg text-[10px] font-bold transition-all ${
+                          filterType === op
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {op === 'all' ? 'الكل' : op === 'sale' ? 'للبيع' : 'للإيجار'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Property Type selection */}
+                <div className="space-y-1">
+                  <span className="block text-[10px] font-bold text-slate-400">تصنيف العقار:</span>
+                  <div className="grid grid-cols-4 gap-1 p-0.5 bg-slate-950 rounded-xl border border-slate-800">
+                    {(['all', 'apartment', 'villa', 'land'] as const).map(pType => (
+                      <button
+                        key={pType}
+                        onClick={() => setFilterPropertyType(pType)}
+                        className={`py-1 rounded-lg text-[9px] font-bold transition-all ${
+                          filterPropertyType === pType
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {pType === 'all' ? 'الكل' : pType === 'apartment' ? 'شقة' : pType === 'villa' ? 'فيلا' : 'أرض'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Rooms Selector */}
+                <div className="space-y-1">
+                  <span className="block text-[10px] font-bold text-slate-400">الحد الأدنى للغرف:</span>
+                  <div className="grid grid-cols-5 gap-1 p-0.5 bg-slate-950 rounded-xl border border-slate-800">
+                    {(['all', '1', '2', '3', '4'] as const).map(r => (
+                      <button
+                        key={r}
+                        onClick={() => setRoomsCount(r)}
+                        className={`py-1 rounded-lg text-[9px] font-bold transition-all ${
+                          roomsCount === r
+                            ? 'bg-amber-500 text-slate-950 font-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {r === 'all' ? 'الكل' : `+${r}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* D. Beautiful Interactive Property List (Matching Current Map View) */}
+          <div className="space-y-2.5">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xs font-black text-white flex items-center gap-1.5">
+                <span className="w-1.5 h-3.5 bg-amber-500 rounded-full" />
+                العقارات المكتشفة بالمنطقة المحددة ({baseFilteredProperties.length}):
+              </h3>
+              <span className="text-[10px] text-slate-400 font-bold">انقر للتركيز وعرض التفاصيل</span>
+            </div>
+
+            {baseFilteredProperties.length === 0 ? (
+              <div className="p-8 text-center bg-slate-900/30 border border-slate-800 rounded-2xl text-slate-400 text-xs">
+                لا توجد عقارات متاحة ضمن نطاق رؤية الخريطة وفلاتر البحث الحالية.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-6">
+                {baseFilteredProperties.map(p => {
+                  const isSelected = selectedProperty?.id === p.id;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        // Fly to coordinate and select
+                        if (mapRef.current) {
+                          mapRef.current.flyTo([p.lat, p.lng], 14);
+                        }
+                        onSelectProperty(p);
+                        setActivePreviewProperty(p);
+                      }}
+                      className={`group relative p-3 rounded-2xl border transition-all duration-300 cursor-pointer text-right flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-amber-950/20 border-amber-500/70 shadow-lg shadow-amber-500/5'
+                          : 'bg-slate-900/60 border-slate-800/80 hover:bg-slate-850 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Image representation & badges */}
+                      <div className="relative w-full h-28 rounded-xl overflow-hidden mb-2">
+                        <img
+                          src={p.images[0]}
+                          alt={p.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          <span className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase text-white shadow-md ${
+                            p.type === 'sale' ? 'bg-red-600' : 'bg-blue-600'
+                          }`}>
+                            {p.type === 'sale' ? 'للبيع' : 'للإيجار'}
+                          </span>
+                          {p.isFeatured && (
+                            <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-amber-500 text-slate-950 flex items-center gap-0.5 shadow-md">
+                              <Sparkles className="w-2.5 h-2.5" />
+                              مميز
+                            </span>
+                          )}
+                        </div>
+                        <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-slate-950/80 backdrop-blur rounded-lg text-[9px] font-black text-amber-400">
+                          {p.price.toLocaleString()} ج.م
+                        </div>
+                      </div>
+
+                      {/* Property text metadata */}
+                      <div className="space-y-1">
+                        <h4 className="text-xs font-black text-white group-hover:text-amber-400 transition-colors line-clamp-1">{p.title}</h4>
+                        <p className="text-[10px] text-slate-400 line-clamp-1">{p.location}</p>
+                        <div className="flex gap-2.5 text-[9px] text-slate-500 font-bold pt-1 border-t border-slate-800/60">
+                          <span>🚪 {p.rooms} غرف</span>
+                          <span>📐 {p.area} م²</span>
+                          <span>🏙️ {p.city}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* "أعلن عن عقارك" Add Action button inside bottom navigation */}
-        {(currentUser.roles.includes('seller') || currentUser.roles.includes('landlord')) && (
-          <button
-            onClick={() => setActiveTab('add')}
-            className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1 transition-all shadow-md shadow-amber-500/10 hover:scale-[1.03]"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span className="hidden sm:inline">أعلن</span>
-          </button>
-        )}
       </div>
-
     </div>
   );
 }
