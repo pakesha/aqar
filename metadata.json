@@ -1,0 +1,10 @@
+{
+  "name": "منصة عقاراتنا الذكية",
+  "description": "منصة عقارية متكاملة وذكية لبيع وتأجير وإدارة العقارات، مزودة بخريطة تفاعلية ونظام عمولات متطور ولوحة تحكم شاملة وميزات مدعومة بالذكاء الاصطناعي.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
