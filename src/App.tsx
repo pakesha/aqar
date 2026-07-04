@@ -26,6 +26,12 @@ import { Sparkles, MapPin, Compass, CheckCircle2, X, ShieldAlert, Lock, Shield, 
 import { motion, AnimatePresence } from 'motion/react';
 import { saveAllItems, getAllItems } from './utils/indexedDb';
 import { hashPassword } from './utils/auth';
+import { 
+  seedFirestoreIfEmpty, 
+  saveDocument, 
+  updateDocumentFields, 
+  deleteDocument 
+} from './utils/firebase';
 
 // Utility to verify admin credentials without exposing secret key in clear text
 const isSecretMatch = (input: string): boolean => {
@@ -37,6 +43,9 @@ const isSecretMatch = (input: string): boolean => {
 };
 
 export default function App() {
+  // Database load status state to prevent early save triggers (critical race-condition protection)
+  const [dbLoaded, setDbLoaded] = useState(false);
+
   // Core dynamic states
   const [properties, setProperties] = useState<Property[]>(() => {
     const saved = localStorage.getItem('aqar_properties');
@@ -72,53 +81,52 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
   });
 
-  // Asynchronously load heavy data from High-Capacity IndexedDB on application start
+  // Asynchronously load heavy data from Cloud Firestore on application start
   useEffect(() => {
-    const loadIndexedDBData = async () => {
+    const loadCloudData = async () => {
       try {
-        const dbUsers = await getAllItems<User>('users');
-        if (dbUsers && dbUsers.length > 0) {
-          setUsers(dbUsers);
-        } else {
-          await saveAllItems('users', INITIAL_USERS);
-        }
+        const cloudData = await seedFirestoreIfEmpty(
+          INITIAL_PROPERTIES,
+          INITIAL_USERS,
+          INITIAL_MESSAGES,
+          INITIAL_INVOICES,
+          INITIAL_AUDIT_LOGS
+        );
 
-        const dbProperties = await getAllItems<Property>('properties');
-        if (dbProperties && dbProperties.length > 0) {
-          setProperties(dbProperties);
-        } else {
-          await saveAllItems('properties', INITIAL_PROPERTIES);
-        }
+        setProperties(cloudData.properties);
+        setUsers(cloudData.users);
+        setMessages(cloudData.messages);
+        setInvoices(cloudData.invoices);
+        setAuditLogs(cloudData.auditLogs);
 
-        const dbMessages = await getAllItems<Message>('messages');
-        if (dbMessages && dbMessages.length > 0) {
-          setMessages(dbMessages);
-        } else {
-          await saveAllItems('messages', INITIAL_MESSAGES);
-        }
-
-        const dbInvoices = await getAllItems<Invoice>('invoices');
-        if (dbInvoices && dbInvoices.length > 0) {
-          setInvoices(dbInvoices);
-        } else {
-          await saveAllItems('invoices', INITIAL_INVOICES);
-        }
-
-        const dbLogs = await getAllItems<AuditLog>('auditLogs');
-        if (dbLogs && dbLogs.length > 0) {
-          setAuditLogs(dbLogs);
-        } else {
-          await saveAllItems('auditLogs', INITIAL_AUDIT_LOGS);
-        }
+        // Successfully loaded from Firestore, safe to synchronize state updates now
+        setDbLoaded(true);
       } catch (err) {
-        console.error('Failed to load from secure IndexedDB on boot:', err);
+        console.error('Failed to load from Cloud Firestore on boot:', err);
+        // Fallback to local IndexedDB/LocalStorage if Firestore is completely inaccessible
+        try {
+          const dbUsers = await getAllItems<User>('users');
+          if (dbUsers && dbUsers.length > 0) setUsers(dbUsers);
+          const dbProperties = await getAllItems<Property>('properties');
+          if (dbProperties && dbProperties.length > 0) setProperties(dbProperties);
+          const dbMessages = await getAllItems<Message>('messages');
+          if (dbMessages && dbMessages.length > 0) setMessages(dbMessages);
+          const dbInvoices = await getAllItems<Invoice>('invoices');
+          if (dbInvoices && dbInvoices.length > 0) setInvoices(dbInvoices);
+          const dbLogs = await getAllItems<AuditLog>('auditLogs');
+          if (dbLogs && dbLogs.length > 0) setAuditLogs(dbLogs);
+        } catch (innerErr) {
+          console.error('IndexedDB fallback load failed too:', innerErr);
+        }
+        setDbLoaded(true);
       }
     };
-    loadIndexedDBData();
+    loadCloudData();
   }, []);
 
   // State persistence triggers (Both standard storage and IndexedDB)
   useEffect(() => {
+    if (!dbLoaded) return; // Prevent saving slim properties over IndexedDB on first load
     // To prevent LocalStorage Quota Crashes when uploading multiple heavy images/videos,
     // we save a slim version in local storage but save the FULL data including rich media in IndexedDB.
     try {
@@ -133,39 +141,45 @@ export default function App() {
       console.warn('LocalStorage size limit warning, relying strictly on High-Capacity IndexedDB');
     }
     saveAllItems('properties', properties).catch(err => console.error('IndexedDB save properties error:', err));
-  }, [properties]);
+  }, [properties, dbLoaded]);
 
   useEffect(() => {
+    if (!dbLoaded) return;
     localStorage.setItem('aqar_users', JSON.stringify(users));
     saveAllItems('users', users).catch(err => console.error('IndexedDB save users error:', err));
-  }, [users]);
+  }, [users, dbLoaded]);
 
   useEffect(() => {
+    if (!dbLoaded) return;
     if (currentUser) {
       localStorage.setItem('aqar_current_user', JSON.stringify(currentUser));
     } else {
       localStorage.removeItem('aqar_current_user');
     }
-  }, [currentUser]);
+  }, [currentUser, dbLoaded]);
 
   useEffect(() => {
+    if (!dbLoaded) return;
     localStorage.setItem('aqar_is_admin_authenticated', String(isAdminAuthenticated));
-  }, [isAdminAuthenticated]);
+  }, [isAdminAuthenticated, dbLoaded]);
 
   useEffect(() => {
+    if (!dbLoaded) return;
     localStorage.setItem('aqar_messages', JSON.stringify(messages));
     saveAllItems('messages', messages).catch(err => console.error('IndexedDB save messages error:', err));
-  }, [messages]);
+  }, [messages, dbLoaded]);
 
   useEffect(() => {
+    if (!dbLoaded) return;
     localStorage.setItem('aqar_invoices', JSON.stringify(invoices));
     saveAllItems('invoices', invoices).catch(err => console.error('IndexedDB save invoices error:', err));
-  }, [invoices]);
+  }, [invoices, dbLoaded]);
 
   useEffect(() => {
+    if (!dbLoaded) return;
     localStorage.setItem('aqar_audit_logs', JSON.stringify(auditLogs));
     saveAllItems('auditLogs', auditLogs).catch(err => console.error('IndexedDB save auditLogs error:', err));
-  }, [auditLogs]);
+  }, [auditLogs, dbLoaded]);
 
   // Layout navigation state
   const [activeTab, setActiveTab] = useState<'map' | 'dashboard' | 'admin' | 'ai' | 'add'>('map');
@@ -205,6 +219,7 @@ export default function App() {
       setUsers(all => all.map(u => u.id === prev.id ? next : u));
       return next;
     });
+    updateDocumentFields('users', currentUser.id, updatedFields).catch(err => console.error('Firestore update user error:', err));
 
     // Log the update
     if (updatedFields.verificationStatus === 'pending') {
@@ -237,6 +252,7 @@ export default function App() {
       timestamp: new Date().toISOString()
     };
     setAuditLogs(prev => [newLog, ...prev]);
+    saveDocument('auditLogs', newLog).catch(err => console.error('Firestore save auditLog error:', err));
   };
 
   // 3. Submitting new properties (Adds property to list with 'pending' status for moderation)
@@ -275,6 +291,7 @@ export default function App() {
     };
 
     setProperties(prev => [newProp, ...prev]);
+    saveDocument('properties', newProp).catch(err => console.error('Firestore save error:', err));
     setActiveTab('map'); // Return to map
     
     pushAuditLog(
@@ -288,6 +305,7 @@ export default function App() {
   // 4. Admin Approving/Rejecting Pending properties
   const handleApproveProperty = (id: string, status: 'available' | 'rejected' | 'sold' | 'rented') => {
     setProperties(prev => prev.map(p => p.id === id ? { ...p, status } : p));
+    updateDocumentFields('properties', id, { status }).catch(err => console.error('Firestore update status error:', err));
     const propObj = properties.find(p => p.id === id);
     
     if (propObj) {
@@ -309,6 +327,10 @@ export default function App() {
       verificationStatus: status,
       isVerified: status === 'verified'
     } : u));
+    updateDocumentFields('users', userId, {
+      verificationStatus: status,
+      isVerified: status === 'verified'
+    }).catch(err => console.error('Firestore verify user error:', err));
 
     // Also update currentUser state if it matches
     if (currentUser && currentUser.id === userId) {
@@ -336,21 +358,25 @@ export default function App() {
   // Administrative Control Handlers for Posts and User Accounts
   const handleAdminAddProperty = (newProp: Property) => {
     setProperties(prev => [newProp, ...prev]);
+    saveDocument('properties', newProp).catch(err => console.error('Firestore save error:', err));
     pushAuditLog('admin_user', 'المدير العام للمنصة', 'إضافة إعلان كمسؤول', `قام المدير العام بإضافة الإعلان الجديد: "${newProp.title}" بقيمة ${newProp.price.toLocaleString()} ج.م.`);
   };
 
   const handleAdminEditProperty = (edited: Property) => {
     setProperties(prev => prev.map(p => p.id === edited.id ? edited : p));
+    saveDocument('properties', edited).catch(err => console.error('Firestore save error:', err));
     pushAuditLog('admin_user', 'المدير العام للمنصة', 'تعديل إعلان كمسؤول', `قام المدير العام بتعديل بيانات الإعلان: "${edited.title}".`);
   };
 
   const handleAdminDeleteProperty = (id: string) => {
     setProperties(prev => prev.filter(p => p.id !== id));
+    deleteDocument('properties', id).catch(err => console.error('Firestore delete error:', err));
     pushAuditLog('admin_user', 'المدير العام للمنصة', 'حذف إعلان كمسؤول', `تم حذف الإعلان العقاري ذو المعرف (#${id}) نهائياً من قبل الإدارة.`);
   };
 
   const handleAdminAddUser = async (newUser: User, passwordPlain?: string) => {
     setUsers(prev => [newUser, ...prev]);
+    saveDocument('users', newUser).catch(err => console.error('Firestore save error:', err));
     if (passwordPlain) {
       try {
         const hashed = await hashPassword(passwordPlain);
@@ -366,6 +392,7 @@ export default function App() {
 
   const handleAdminEditUser = (edited: User) => {
     setUsers(prev => prev.map(u => u.id === edited.id ? edited : u));
+    saveDocument('users', edited).catch(err => console.error('Firestore save error:', err));
     if (currentUser && currentUser.id === edited.id) {
       setCurrentUser(edited);
     }
@@ -374,21 +401,28 @@ export default function App() {
 
   const handleAdminDeleteUser = (id: string) => {
     setUsers(prev => prev.filter(u => u.id !== id));
+    deleteDocument('users', id).catch(err => console.error('Firestore delete error:', err));
     pushAuditLog('admin_user', 'المدير العام للمنصة', 'حذف حساب كمسؤول', `تم حذف حساب المستخدم ذو المعرف (#${id}) نهائياً من قبل الإدارة.`);
   };
 
   const handleAdminToggleRestrictUser = (id: string) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, isRestricted: !u.isRestricted } : u));
     const target = users.find(u => u.id === id);
     if (target) {
       const willBeRestricted = !target.isRestricted;
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, isRestricted: willBeRestricted } : u));
+      updateDocumentFields('users', id, { isRestricted: willBeRestricted }).catch(err => console.error('Firestore update error:', err));
       pushAuditLog('admin_user', 'المدير العام للمنصة', willBeRestricted ? 'تقييد الحساب' : 'إلغاء تقييد الحساب', `تم ${willBeRestricted ? 'تقييد وحظر' : 'إلغاء حظر وتفعيل'} حساب المستخدم "${target.name}" لمخالفة الشروط.`);
     }
   };
 
   // 6. Admin Toggling Featured glows of properties
   const handleToggleFeatured = (id: string) => {
-    setProperties(prev => prev.map(p => p.id === id ? { ...p, isFeatured: !p.isFeatured } : p));
+    const target = properties.find(p => p.id === id);
+    if (target) {
+      const nextFeatured = !target.isFeatured;
+      setProperties(prev => prev.map(p => p.id === id ? { ...p, isFeatured: nextFeatured } : p));
+      updateDocumentFields('properties', id, { isFeatured: nextFeatured }).catch(err => console.error('Firestore update error:', err));
+    }
   };
 
   // 7. Internal messenger - sending message
@@ -407,6 +441,7 @@ export default function App() {
     };
 
     setMessages(prev => [...prev, newMsg]);
+    saveDocument('messages', newMsg).catch(err => console.error('Firestore save message error:', err));
 
     pushAuditLog(
       currentUser.id,
@@ -420,6 +455,7 @@ export default function App() {
   const handlePayInvoice = (id: string) => {
     if (!currentUser) return;
     setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'paid' } : inv));
+    updateDocumentFields('invoices', id, { status: 'paid' }).catch(err => console.error('Firestore pay invoice error:', err));
     const inv = invoices.find(i => i.id === id);
     if (inv) {
       pushAuditLog(
@@ -434,6 +470,7 @@ export default function App() {
   // Admin marking paid manually
   const handleMarkInvoicePaidFromAdmin = (id: string) => {
     setInvoices(prev => prev.map(inv => inv.id === id ? { ...inv, status: 'paid' } : inv));
+    updateDocumentFields('invoices', id, { status: 'paid' }).catch(err => console.error('Firestore admin pay invoice error:', err));
     const inv = invoices.find(i => i.id === id);
     if (inv) {
       pushAuditLog(
@@ -483,6 +520,41 @@ export default function App() {
     setActiveTab('map');
   };
 
+  if (!dbLoaded) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white" dir="rtl">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col items-center space-y-6 max-w-sm px-6 text-center"
+        >
+          {/* Animated Loader / Logo */}
+          <div className="relative flex items-center justify-center w-20 h-20 bg-amber-500/10 rounded-3xl border border-amber-500/30 shadow-2xl shadow-amber-500/5">
+            <Sparkles className="w-10 h-10 text-amber-500 animate-pulse" />
+            <div className="absolute inset-0 rounded-3xl border-2 border-t-amber-500 border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black tracking-tight text-white font-sans">مِنصَّة عَقَار الذَّكِية</h1>
+            <p className="text-sm text-slate-400">جاري تحميل وتأمين قاعدة البيانات الفائقة...</p>
+          </div>
+          
+          {/* Decorative bar */}
+          <div className="w-48 h-1 bg-slate-900 rounded-full overflow-hidden relative">
+            <motion.div
+              className="absolute left-0 top-0 bottom-0 bg-amber-500 rounded-full"
+              initial={{ left: "-100%", right: "100%" }}
+              animate={{ left: "100%", right: "-100%" }}
+              transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+              style={{ width: "40%" }}
+            />
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   if (!currentUser) {
     return (
       <AuthScreen
@@ -498,6 +570,7 @@ export default function App() {
         usersList={users}
         onRegisterUser={(newUser) => {
           setUsers(prev => [...prev, newUser]);
+          saveDocument('users', newUser).catch(err => console.error('Firestore user save error:', err));
         }}
       />
     );
@@ -611,10 +684,12 @@ export default function App() {
             properties={properties}
             onDeleteProperty={(id) => {
               setProperties(prev => prev.filter(p => p.id !== id));
+              deleteDocument('properties', id).catch(err => console.error('Firestore delete property error:', err));
               pushAuditLog(currentUser.id, currentUser.name, 'حذف إعلان عقاري', `قام المستخدم بحذف الإعلان العقاري (#${id}) نهائياً.`);
             }}
             onEditProperty={(edited) => {
               setProperties(prev => prev.map(p => p.id === edited.id ? edited : p));
+              saveDocument('properties', edited).catch(err => console.error('Firestore edit property error:', err));
               pushAuditLog(currentUser.id, currentUser.name, 'تعديل الإعلان العقاري', `قام المستخدم بتعديل تفاصيل ووصف الإعلان: "${edited.title}".`);
             }}
             messages={messages}

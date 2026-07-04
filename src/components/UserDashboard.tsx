@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { User, Property, Message, Invoice, UserRole, VerificationStatus } from '../types';
+import { compressImage } from '../utils/imageCompressor';
 import { Eye, Heart, Key, CheckCircle, RefreshCw, FileText, UserCheck, ShieldCheck, Mail, Phone, Plus, MapPin, Trash2, Edit2, CreditCard, MessageSquare, Shield, Clock, Send, Sparkles, ArrowLeft, Compass } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -51,17 +52,17 @@ export default function UserDashboard({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
+    compressImage(file)
+      .then((compressedBase64) => {
         if (side === 'front') {
-          setIdCardFront(event.target.result as string);
+          setIdCardFront(compressedBase64);
         } else {
-          setIdCardBack(event.target.result as string);
+          setIdCardBack(compressedBase64);
         }
-      }
-    };
-    reader.readAsDataURL(file);
+      })
+      .catch((err) => {
+        console.error('Error compressing ID card image:', err);
+      });
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -72,17 +73,17 @@ export default function UserDashboard({
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
+    compressImage(file)
+      .then((compressedBase64) => {
         if (side === 'front') {
-          setIdCardFront(event.target.result as string);
+          setIdCardFront(compressedBase64);
         } else {
-          setIdCardBack(event.target.result as string);
+          setIdCardBack(compressedBase64);
         }
-      }
-    };
-    reader.readAsDataURL(file);
+      })
+      .catch((err) => {
+        console.error('Error compressing dropped ID card image:', err);
+      });
   };
 
   // Dynamic switch roles
@@ -549,13 +550,13 @@ export default function UserDashboard({
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (event) => {
-                              if (event.target?.result) {
-                                setEditAvatar(event.target.result as string);
-                              }
-                            };
-                            reader.readAsDataURL(file);
+                            compressImage(file)
+                              .then((compressedBase64) => {
+                                setEditAvatar(compressedBase64);
+                              })
+                              .catch((err) => {
+                                console.error('Error compressing avatar:', err);
+                              });
                           }
                         }}
                       />

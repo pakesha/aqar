@@ -5,6 +5,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Property, OperationType, PropertyType, FinishingType } from '../types';
+import { compressImage } from '../utils/imageCompressor';
 import { Upload, X, MapPin, Compass, ShieldCheck, Sparkles, Plus, Image as ImageIcon, ChevronRight, CheckCircle2, ZoomIn, ZoomOut, RefreshCw, Navigation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import L from 'leaflet';
@@ -336,13 +337,14 @@ export default function AddProperty({ onAddProperty, onCancel, activeCity }: Add
         showToast('يرجى اختيار ملفات صور صالحة فقط (PNG, JPG, JPEG).', 'error');
         return;
       }
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setUploadedImages((prev) => [...prev, event.target!.result as string]);
-        }
-      };
-      reader.readAsDataURL(file);
+      compressImage(file)
+        .then((compressedBase64) => {
+          setUploadedImages((prev) => [...prev, compressedBase64]);
+        })
+        .catch((err) => {
+          console.error('Error compressing image:', err);
+          showToast('حدث خطأ أثناء معالجة الصورة وضغطها.', 'error');
+        });
     });
   };
 
